@@ -1,13 +1,18 @@
 from flask import Flask, request, jsonify, send_file
 from graphviz import Digraph
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app, origins=["http://localhost:4200"])
 
 # =================== FUNCIONES ===================
 
 def contar_frecuencias(text):
     frecuencias = {}
+    for caracter in text:
+        frecuencias[caracter] = frecuencias.get(caracter, 0) + 1
+    return sorted(frecuencias.items(), key=lambda x: x[1])
     for caracter in text:
         frecuencias[caracter] = frecuencias.get(caracter, 0) + 1
     return sorted(frecuencias.items(), key=lambda x: x[1])
