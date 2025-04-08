@@ -97,24 +97,32 @@ def cifrar_texto(texto, prefix=""):
 
 # =================== FLASK ===================
 
+def serializar_arbol(nodo):
+    if nodo[2] is None and nodo[3] is None:
+        return {'char': nodo[0], 'freq': nodo[1], 'left': None, 'right': None}
+    return {
+        'char': nodo[0],
+        'freq': nodo[1],
+        'left': serializar_arbol(nodo[2]),
+        'right': serializar_arbol(nodo[3])
+    }
+
 @app.route("/cifrar_usuario", methods=["POST"])
 def api_cifrar_usuario():
     data = request.get_json()
     
-    # Validar campos del usuario
     if not data or not all(key in data for key in ['name', 'lastname', 'email']):
         return jsonify({"error": "Se requieren name, lastname y email"}), 400
     
-    # Procesar cada campo del usuario
     resultados = {}
     imagenes = []
+    arboles = {}  # Nuevo: almacenar los árboles serializados
     
     for campo in ['name', 'lastname', 'email']:
         texto = data[campo]
         if not texto:
             return jsonify({"error": f"El campo {campo} no puede estar vacío"}), 400
         
-        # Cifrar el campo y generar imagen única
         resultado = cifrar_texto(texto, prefix=f"{campo}_")
         resultados[campo] = {
             "texto_original": texto,
@@ -123,11 +131,52 @@ def api_cifrar_usuario():
             "codigos": resultado["codigos"]
         }
         imagenes.append(resultado["imagen"])
+        
+        # Serializar el árbol y guardarlo
+        frecuencias = contar_frecuencias(texto)
+        arbol = construir_arbol_huffman(frecuencias)
+        arboles[campo] = serializar_arbol(arbol)  # Árbol serializado
     
     return jsonify({
         "usuario": resultados,
-        "imagenes": imagenes
+        "imagenes": imagenes,
+        "arboles": arboles  # Nuevo: incluir los árboles en la respuesta
     })
+
+def deserializar_arbol(nodo_serializado):
+    if nodo_serializado['left'] is None and nodo_serializado['right'] is None:
+        return (nodo_serializado['char'], nodo_serializado['freq'], None, None)
+    return (
+        nodo_serializado['char'],
+        nodo_serializado['freq'],
+        deserializar_arbol(nodo_serializado['left']),
+        deserializar_arbol(nodo_serializado['right'])
+    )
+
+@app.route("/descifrar", methods=["POST"])
+def api_descifrar():
+    data = request.get_json()
+    
+    if not data or 'texto_cifrado' not in data or 'arbol' not in data:
+        return jsonify({"error": "Se requieren 'texto_cifrado' y 'arbol'"}), 400
+    
+    try:
+        texto_cifrado = data['texto_cifrado']
+        arbol_serializado = data['arbol']
+        
+        # Reconstruir el árbol desde la versión serializada
+        arbol = deserializar_arbol(arbol_serializado)
+        
+        # Descifrar el texto
+        texto_descifrado = descifrar(texto_cifrado, arbol)
+        
+        return jsonify({
+            "texto_cifrado": texto_cifrado,
+            "texto_descifrado": texto_descifrado
+        })
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al descifrar: {str(e)}"}), 500
 
 @app.route("/imagen/<nombre_imagen>")
 def api_imagen(nombre_imagen):
